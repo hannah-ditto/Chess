@@ -77,32 +77,7 @@ public class Pawn : Piece
         if (targetPosition == null)
             return null;
         
-        // Set up enemy pawn for En Passant if relevant
-
-        var (file, square) = Board.ConvertPositionToFileAndSquare(targetPosition);
-        var leftFile = (char) (file-1);
-        var rightFile = (char) (file+1);
-        
-        var enemyPieceLeftPosition = leftFile.ToString() + square;
-        var enemyPawnRightPosition = rightFile.ToString() + square;
-
-        if (Board.PiecePositions.TryGetValue(enemyPieceLeftPosition, out var enemyPieceLeft))
-        {
-            if (enemyPieceLeft is Pawn enemyPawn)
-            {
-                enemyPawn.IsEligibleForSpecial = true;
-                enemyPawn.SetSpecialMove(true);
-            }
-        }
-
-        if (Board.PiecePositions.TryGetValue(enemyPawnRightPosition, out var enemyPieceRight))
-        {
-            if (enemyPieceRight is Pawn enemyPawn)
-            {
-                enemyPawn.IsEligibleForSpecial = true;
-                enemyPawn.SetSpecialMove(true);
-            }
-        } 
+        CheckForEnPassant(targetPosition);
 
         return targetPosition;
     }
@@ -112,25 +87,16 @@ public class Pawn : Piece
         return (from m in _validMoves.Value
                 where (MoveType.Capture & m.Value) == m.Value
                 select m.Key)
-            .Select( m=>
+            .FirstOrDefault(m =>
             {
-                var currentPiece = Board.ConvertPositionToFileAndSquare(CurrentPosition);
-                var targetPosition = Board.ConvertPositionToFileAndSquare(m);
-                    
-                if (moveLeft && targetPosition.file < currentPiece.file)
-                    return m;
-                    
-                if (!moveLeft && targetPosition.file > currentPiece.file)
-                {
-                    return m;
-                }
+                var (currentFile, _) = Board.ConvertPositionToFileAndSquare(CurrentPosition);
+                var (moveFile, _) = Board.ConvertPositionToFileAndSquare(m);
 
-                return null;
-            })?
-            .First(x=>x != null);
+                return moveLeft && moveFile < currentFile || !moveLeft && moveFile > currentFile;
+            });
     }
 
-    public string SetSpecialMove(bool moveLeft = false)
+    private void SetSpecialMove(bool moveLeft = false)
     {
         string targetPosition;
         
@@ -153,26 +119,43 @@ public class Pawn : Piece
             targetPosition = Move(x => ++x, y => y + 1 * yAxisDirection);
             _validMoves.Value[targetPosition] = MoveType.Special & MoveType.Capture;
         }
-        
-        return targetPosition;
+    }
+    
+    private static void CheckForEnPassant(string targetPosition)
+    {
+        var (file, square) = Board.ConvertPositionToFileAndSquare(targetPosition);
+
+        EnableEnPassant(file, square, 1);
+        EnableEnPassant(file, square, -1);
     }
 
+    private static void EnableEnPassant(char file, int square, int xAxis)
+    {
+        var enemyFile = (char) (file - 1 * xAxis);
+        var enemyPiecePosition = enemyFile.ToString() + square;
+
+        if (!Board.PiecePositions.TryGetValue(enemyPiecePosition, out var enemyPiece) ||
+            enemyPiece is not Pawn enemyPawn) return;
+        
+        enemyPawn.IsEligibleForSpecial = true;
+        enemyPawn.SetSpecialMove(true);
+    }
 
     private void CalculateAvailableTargetPositions(Color color)
     {
-        var yAxisDirection = 1;
+        var yAxis = 1;
 
         if (color == Color.Dark)
-            yAxisDirection = -1;
+            yAxis = -1;
 
         if (IsFirstMove) 
-            _validMoves.Value.AddIfValid(Move(y => y + 2 * yAxisDirection), MoveType.First & MoveType.Regular, Color);
+            _validMoves.Value.AddIfValid(Move(y => y + 2 * yAxis), MoveType.First & MoveType.Regular, Color);
         
         // Capture moves
         
-        _validMoves.Value.AddIfValid(Move(x => --x, y => y + 1 * yAxisDirection), MoveType.Capture, Color);
-        _validMoves.Value.AddIfValid(Move(x => ++x, y => y + 1 * yAxisDirection), MoveType.Capture, Color);
-        _validMoves.Value.AddIfValid(Move(y => y + 1 * yAxisDirection), MoveType.Regular, Color);
+        _validMoves.Value.AddIfValid(Move(x => --x, y => y + 1 * yAxis), MoveType.Capture, Color);
+        _validMoves.Value.AddIfValid(Move(x => ++x, y => y + 1 * yAxis), MoveType.Capture, Color);
+        _validMoves.Value.AddIfValid(Move(y => y + 1 * yAxis), MoveType.Regular, Color);
     }
 }
     
